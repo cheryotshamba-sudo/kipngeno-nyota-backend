@@ -19,8 +19,9 @@ const PAYLOR_CHANNEL_ID = process.env.PAYLOR_CHANNEL_ID;
 const PAYLOR_WEBHOOK_SECRET = process.env.PAYLOR_WEBHOOK_SECRET;
 
 const FRONTEND_URL =
+    const FRONTEND_URL =
     process.env.FRONTEND_URL ||
-    "https://nyota-funds-frontend.onrender.com";
+    "https://nyota-funds-xoa7.onrender.com";
 
 const PAYLOR_BASE_URL =
     "https://api.paylorke.com/api/v1";
