@@ -654,54 +654,53 @@ PAYMENT STATUS
 ====================================================
 */
 
-app.get(
-    "/api/payment/status",
-    (req, res) => {
 
-        const reference =
-            req.query.reference;
+app.get("/api/payment/status", (req, res) => {
 
-        if (!reference) {
+    const reference = req.query.reference;
 
-            return res.status(400).json({
+    console.log(
+        "PAYMENT STATUS CHECK:",
+        reference
+    );
 
-                success: false,
+    if (!reference) {
+        return res.status(400).json({
+            success: false,
+            error: "Payment reference is required"
+        });
+    }
 
-                error:
-                    "Payment reference is required"
+    const payment =
+        paymentStatuses.get(reference);
 
-            });
+    console.log(
+        "PAYMENT FOUND:",
+        payment
+    );
 
-        }
-
-        const payment =
-            paymentStatuses.get(
-                reference
-            );
-
-        if (!payment) {
-
-            return res.json({
-
-                success: true,
-
-                status:
-                    "PENDING"
-
-            });
-
-        }
+    if (!payment) {
 
         return res.json({
-
             success: true,
-
-            ...payment
-
+            status: "PENDING",
+            reference: reference
         });
 
     }
-);
+
+    return res.json({
+        success: true,
+        status: payment.status,
+        reference: payment.reference,
+        transactionId: payment.transactionId || null,
+        amount: payment.amount || null,
+        mpesaReceipt: payment.mpesaReceipt || null,
+        providerRef: payment.providerRef || null
+    });
+
+});
+        
 
 /*
 ====================================================
