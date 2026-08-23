@@ -16,10 +16,10 @@ ENVIRONMENT VARIABLES
 
 const PAYLOR_API_KEY = process.env.PAYLOR_API_KEY;
 const PAYLOR_CHANNEL_ID = process.env.PAYLOR_CHANNEL_ID;
-const PAYLOR_WEBHOOK_SECRET = process.env.PAYLOR_WEBHOOK_SECRET;
+const PAYLOR_WEBHOOK_SECRET =
+    process.env.PAYLOR_WEBHOOK_SECRET;
 
 const FRONTEND_URL =
-    const FRONTEND_URL =
     process.env.FRONTEND_URL ||
     "https://nyota-funds-xoa7.onrender.com";
 
@@ -49,8 +49,8 @@ app.use(
 JSON BODY
 ====================================================
 
-Keep the exact raw body because Paylor signs the
-original callback bytes.
+Keep the exact raw body because Paylor signs
+the original callback bytes.
 */
 
 app.use(
@@ -63,33 +63,18 @@ app.use(
 
 /*
 ====================================================
-GET BACKEND URL
+BACKEND URL
 ====================================================
 */
 
 function getBackendUrl(req) {
-    /*
-    Render automatically provides RENDER_EXTERNAL_URL.
-
-    Example:
-    https://nyota-funds-backend.onrender.com
-    */
-
     if (process.env.RENDER_EXTERNAL_URL) {
         return process.env.RENDER_EXTERNAL_URL;
     }
 
-    /*
-    Optional manual environment variable.
-    */
-
     if (process.env.BACKEND_URL) {
         return process.env.BACKEND_URL;
     }
-
-    /*
-    Fallback to current request host.
-    */
 
     const protocol =
         req.headers["x-forwarded-proto"] ||
@@ -124,12 +109,31 @@ ENVIRONMENT CHECK
 app.get("/api/health", (req, res) => {
     res.json({
         success: true,
+
         backend: "online",
-        paylorApiKeyConfigured: Boolean(PAYLOR_API_KEY),
-        paylorChannelConfigured: Boolean(PAYLOR_CHANNEL_ID),
-        webhookSecretConfigured: Boolean(
-            PAYLOR_WEBHOOK_SECRET
-        ),
+
+        paylorApiKeyConfigured:
+            Boolean(PAYLOR_API_KEY),
+
+        paylorChannelConfigured:
+            Boolean(PAYLOR_CHANNEL_ID),
+
+        webhookSecretConfigured:
+            Boolean(PAYLOR_WEBHOOK_SECRET),
+
+        /*
+        Shows only a safe partial channel value.
+        Never expose the API key.
+        */
+
+        paylorChannelPreview:
+            PAYLOR_CHANNEL_ID
+                ? `${PAYLOR_CHANNEL_ID.substring(
+                      0,
+                      5
+                  )}*****`
+                : null,
+
         frontendUrl: FRONTEND_URL,
     });
 });
@@ -262,10 +266,6 @@ function verifyPaylorWebhook(req) {
         return false;
     }
 
-    /*
-    Paylor uses HMAC SHA-256 over the exact raw body.
-    */
-
     const expectedSignature =
         crypto
             .createHmac(
@@ -292,10 +292,16 @@ app.post(
     async (req, res) => {
         try {
             /*
-            Check API key
+            ====================================================
+            CHECK PAYLOR API KEY
+            ====================================================
             */
 
             if (!PAYLOR_API_KEY) {
+                console.error(
+                    "PAYLOR_API_KEY is missing"
+                );
+
                 return res.status(500).json({
                     success: false,
                     error:
@@ -304,10 +310,16 @@ app.post(
             }
 
             /*
-            Check channel
+            ====================================================
+            CHECK PAYLOR CHANNEL
+            ====================================================
             */
 
             if (!PAYLOR_CHANNEL_ID) {
+                console.error(
+                    "PAYLOR_CHANNEL_ID is missing"
+                );
+
                 return res.status(500).json({
                     success: false,
                     error:
@@ -323,7 +335,9 @@ app.post(
             } = req.body || {};
 
             /*
-            Normalize phone
+            ====================================================
+            NORMALIZE PHONE
+            ====================================================
             */
 
             const normalizedPhone =
@@ -338,7 +352,9 @@ app.post(
             }
 
             /*
-            Validate amount
+            ====================================================
+            VALIDATE AMOUNT
+            ====================================================
             */
 
             if (!validAmount(amount)) {
@@ -353,8 +369,9 @@ app.post(
                 Number(amount);
 
             /*
-            Create reference if frontend
-            did not provide one.
+            ====================================================
+            CREATE REFERENCE
+            ====================================================
             */
 
             const paymentReference =
@@ -362,35 +379,53 @@ app.post(
                 createReference("NYOTA");
 
             /*
-            Create callback URL.
-
-            Render:
-            https://nyota-funds-backend.onrender.com
+            ====================================================
+            CALLBACK URL
+            ====================================================
             */
 
             const callbackUrl =
-                `${getBackendUrl(req)}/api/paylor-callback`;
+                `${getBackendUrl(
+                    req
+                )}/api/paylor-callback`;
 
             /*
-            Paylor STK payload
+            ====================================================
+            PAYLOR STK PAYLOAD
+            ====================================================
             */
 
             const payload = {
                 phone: normalizedPhone,
+
                 amount: paymentAmount,
-                reference: paymentReference,
-                channelId: PAYLOR_CHANNEL_ID,
+
+                reference:
+                    paymentReference,
+
+                channelId:
+                    PAYLOR_CHANNEL_ID,
+
                 description:
                     description ||
                     "Nyota Funds payment",
+
                 callbackUrl,
             };
+
+            /*
+            ====================================================
+            SAFE LOGGING
+            ====================================================
+            */
 
             console.log(
                 "===================================="
             );
 
-            console.log("NYOTA STK PUSH");
+            console.log(
+                "NYOTA FUNDS STK PUSH"
+            );
 
             console.log(
                 "Phone:",
@@ -408,8 +443,20 @@ app.post(
             );
 
             console.log(
+                "Channel:",
+                PAYLOR_CHANNEL_ID
+            );
+
+            console.log(
                 "Callback:",
                 callbackUrl
+            );
+
+            console.log(
+                "API Key:",
+                PAYLOR_API_KEY
+                    ? "CONFIGURED"
+                    : "MISSING"
             );
 
             console.log(
@@ -417,7 +464,9 @@ app.post(
             );
 
             /*
-            Send request to Paylor
+            ====================================================
+            SEND REQUEST TO PAYLOR
+            ====================================================
             */
 
             const response = await fetch(
@@ -432,11 +481,6 @@ app.post(
                         "Content-Type":
                             "application/json",
 
-                        /*
-                        Prevent duplicate payment
-                        attempts.
-                        */
-
                         "Idempotency-Key":
                             paymentReference,
                     },
@@ -447,7 +491,9 @@ app.post(
             );
 
             /*
-            Safely parse response
+            ====================================================
+            PARSE PAYLOR RESPONSE
+            ====================================================
             */
 
             const data =
@@ -461,22 +507,34 @@ app.post(
             );
 
             /*
-            Paylor rejected request
+            ====================================================
+            PAYLOR REJECTED REQUEST
+            ====================================================
             */
 
             if (!response.ok) {
+                console.error(
+                    "PAYLOR STK REJECTED:",
+                    response.status,
+                    data
+                );
+
                 return res
                     .status(response.status)
                     .json({
                         success: false,
+
                         error:
                             "Paylor rejected the STK Push",
+
                         details: data,
                     });
             }
 
             /*
-            Success
+            ====================================================
+            SUCCESS
+            ====================================================
             */
 
             return res.json({
@@ -536,11 +594,6 @@ app.post(
             );
 
             console.log(
-                "Headers:",
-                req.headers
-            );
-
-            console.log(
                 "Body:",
                 req.body
             );
@@ -550,7 +603,9 @@ app.post(
             );
 
             /*
-            Webhook secret must exist.
+            ====================================================
+            CHECK WEBHOOK SECRET
+            ====================================================
             */
 
             if (!PAYLOR_WEBHOOK_SECRET) {
@@ -566,7 +621,9 @@ app.post(
             }
 
             /*
-            Verify Paylor signature.
+            ====================================================
+            VERIFY SIGNATURE
+            ====================================================
             */
 
             const validSignature =
@@ -589,30 +646,13 @@ app.post(
             );
 
             /*
-            Get callback data.
+            ====================================================
+            CALLBACK DATA
+            ====================================================
             */
 
             const body =
                 req.body || {};
-
-            /*
-            Paylor webhook format:
-            
-            {
-                event: "payment.success",
-                transaction: {
-                    id: "...",
-                    reference: "...",
-                    internalReference: "...",
-                    amount: 1000,
-                    status: "COMPLETED",
-                    providerRef: "...",
-                    metadata: {
-                        mpesaReceipt: "..."
-                    }
-                }
-            }
-            */
 
             const event =
                 body.event || null;
@@ -676,7 +716,7 @@ app.post(
             );
 
             console.log(
-                "MPESA RECEIPT:",
+                "M-PESA RECEIPT:",
                 mpesaReceipt
             );
 
@@ -687,7 +727,8 @@ app.post(
             */
 
             if (
-                event === "payment.success" ||
+                event ===
+                    "payment.success" ||
                 status === "COMPLETED" ||
                 status === "SUCCESS"
             ) {
@@ -724,9 +765,12 @@ app.post(
                 );
 
                 /*
-                IMPORTANT:
-                This is where your application can
-                mark the corresponding payment as PAID.
+                ====================================================
+                IMPORTANT
+                ====================================================
+
+                This is where you should update your
+                database/payment record to PAID.
 
                 Example:
 
@@ -764,7 +808,8 @@ app.post(
             */
 
             if (
-                event === "payment.failed" ||
+                event ===
+                    "payment.failed" ||
                 status === "FAILED"
             ) {
                 console.log(
@@ -794,11 +839,6 @@ app.post(
                     "===================================="
                 );
 
-                /*
-                This is where you can mark the payment
-                as FAILED in your database.
-                */
-
                 return res.status(200).json({
                     success: true,
 
@@ -816,7 +856,7 @@ app.post(
 
             /*
             ====================================================
-            OTHER PAYLOR EVENTS
+            OTHER EVENTS
             ====================================================
             */
 
@@ -827,10 +867,15 @@ app.post(
 
             return res.status(200).json({
                 success: true,
+
                 received: true,
+
                 event,
+
                 reference,
+
                 transactionId,
+
                 status,
             });
         } catch (error) {
@@ -839,15 +884,12 @@ app.post(
                 error
             );
 
-            /*
-            Return 500 so Paylor can retry the
-            callback if necessary.
-            */
-
             return res.status(500).json({
                 success: false,
+
                 error:
                     "Callback processing failed",
+
                 message:
                     error.message,
             });
@@ -865,8 +907,12 @@ app.use(
     (req, res) => {
         res.status(404).json({
             success: false,
-            error: "Route not found",
-            path: req.originalUrl,
+
+            error:
+                "Route not found",
+
+            path:
+                req.originalUrl,
         });
     }
 );
@@ -886,7 +932,9 @@ app.use(
 
         res.status(500).json({
             success: false,
-            error: "Internal server error",
+
+            error:
+                "Internal server error",
         });
     }
 );
